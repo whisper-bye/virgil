@@ -411,10 +411,36 @@ class Arguments {
 	def i(i: int) -> int { return Int.unbox(getArg(i)); }
 	def b(i: int) -> byte { return Byte.unbox(getArg(i)); }
 	def s(i: int) -> string { return Byte.unboxString(getArg(i)); }
+	def f(i: int) -> float {
+		var x = getArg(i);
+		return if(Float32Val.?(x), float.view(Float32Val.!(x).bits));
+	}
+	def d(i: int) -> double {
+		var x = getArg(i);
+		return if(Float64Val.?(x), double.view(Float64Val.!(x).bits));
+	}
 	def addr(i: int) -> Addr {
 		var p = getArg(i);
 		if (p == null) return NULL_PTR;
 		return Addr.!(p);
+	}
+	def do_dd_d(func: (double, double) -> double) -> Val {
+		return Float64Val.new(u64.view(func(d(0), d(1))));
+	}
+	def do_ff_f(func: (float, float) -> float) -> Val {
+		return Float32Val.new(u32.view(func(f(0), f(1))));
+	}
+	def do_dd_z(func: (double, double) -> bool) -> Val {
+		return Bool.box(func(d(0), d(1)));
+	}
+	def do_ff_z(func: (float, float) -> bool) -> Val {
+		return Bool.box(func(f(0), f(1)));
+	}
+	def do_d_d(func: double -> double) -> Val {
+		return Float64Val.new(u64.view(func(d(0))));
+	}
+	def do_f_f(func: float -> float) -> Val {
+		return Float32Val.new(u32.view(func(f(0))));
 	}
 }
 def NULL_PTR = Addr.new(null, null, 0).setAbsolute(0);
@@ -428,6 +454,24 @@ def evalOp(op: Operator, args: Arguments) -> Result {
 		BoolNot => return Bool.box(!args.z(0));
 //----------------------------------------------------------------------------
 		OverloadedEq, IntEq, VariantEq => return Bool.box(Values.equal(args.getArg(0), args.getArg(1)));
+//----------------------------------------------------------------------------
+		FloatAdd(isDouble) => return if(isDouble, args.do_dd_d(double.+), args.do_ff_f(float.+));
+		FloatSub(isDouble) => return if(isDouble, args.do_dd_d(double.-), args.do_ff_f(float.-));
+		FloatMul(isDouble) => return if(isDouble, args.do_dd_d(double.*), args.do_ff_f(float.*));
+		FloatDiv(isDouble) => return if(isDouble, args.do_dd_d(double./), args.do_ff_f(float./));
+		FloatBitEq(isDouble) => {
+			var x = args.getArg(0), y = args.getArg(1);
+			if (isDouble) return Bool.box(Float64Val.!(x).bits == Float64Val.!(y).bits);
+			else return Bool.box(Float32Val.!(x).bits == Float32Val.!(y).bits);
+		}
+		FloatEq(isDouble) => return if(isDouble, args.do_dd_z(double.==), args.do_ff_z(float.==));
+		FloatNe(isDouble) => return if(isDouble, args.do_dd_z(double.!=), args.do_ff_z(float.!=));
+		FloatLt(isDouble) => return if(isDouble, args.do_dd_z(double.<), args.do_ff_z(float.<));
+		FloatLteq(isDouble) => return if(isDouble, args.do_dd_z(double.<=), args.do_ff_z(float.<=));
+		FloatAbs(isDouble) => return if(isDouble, args.do_d_d(double.abs), args.do_f_f(float.abs));
+		FloatCeil(isDouble) => return if(isDouble, args.do_d_d(double.ceil), args.do_f_f(float.ceil));
+		FloatFloor(isDouble) => return if(isDouble, args.do_d_d(double.floor), args.do_f_f(float.floor));
+		FloatSqrt(isDouble) => return if(isDouble, args.do_d_d(double.sqrt), args.do_f_f(float.sqrt));
 //----------------------------------------------------------------------------
 		IntCastI => {
 			var val = args.getArg(0), ft = args.getType(0), tt = args.getType(1);
@@ -454,6 +498,23 @@ def evalOp(op: Operator, args: Arguments) -> Result {
 				return Int.box(int.view(Float32Val.!(v).bits));
 			}
 		}
+		FloatCastD => {
+			var d = args.d(0);
+			if (float.?(d)) return Float32Val.new(u32.view(float.!(d)));
+			return args.throw(V3Exception.TypeCheck, "");
+		}
+		FloatQueryD => {
+			return Bool.box(float.?(args.d(0)));
+		}
+		FloatPromoteI(isDouble) => {
+			var a = args.getArg(0);
+			if (a == null) return null;
+			var l = Long.unboxSU(args.getArg(0), V3.isSigned(args.getType(0)));
+			return if(isDouble, Float64Val.new(u64.view(double.!(l))), Float32Val.new(u32.view(float.!(l))));
+		}
+		FloatPromoteF => {
+			return Float64Val.new(u64.view(double.!(args.f(0))));
+		}
 		FloatViewI => {
 			var v = args.getArg(0);
 			if (v == null) return null;
@@ -462,6 +523,9 @@ def evalOp(op: Operator, args: Arguments) -> Result {
 			} else {
 				return Float32Val.new(u32.view(Int.unbox(v)));
 			}
+		}
+		FloatRoundD => {
+			return Float32Val.new(u32.view(float.roundd(args.d(0))));
 		}
 //----------------------------------------------------------------------------
 		RefEq => return Bool.box(args.getArg(0) == args.getArg(1));

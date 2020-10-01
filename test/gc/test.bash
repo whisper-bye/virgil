@@ -50,7 +50,7 @@ execute_target_tests $target
 
 HEAP='-heap-size=24m'
 print_compiling "$target $HEAP" Aeneas
-run_v3c $target -output=$T $HEAP $AENEAS_SOURCES &> $T/Aeneas-gc.compile.out
+run_v3c $target -fp -output=$T $HEAP $AENEAS_SOURCES &> $T/Aeneas-gc.compile.out
 check_no_red $? $T/Aeneas-gc.compile.out
 mv $T/Aeneas $T/Aeneas-gc
 
